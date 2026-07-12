@@ -210,4 +210,4 @@ Root-Rechte benötigen.
 
 Das Protokoll-Grundgerüst orientiert sich an
 [skorokithakis/gr8w8upd8m8](https://github.com/skorokithakis/gr8w8upd8m8)
-(LGPL). Eigener Code hier: [Lizenz nach Wahl, z. B. MIT einfügen].
+(LGPL).
