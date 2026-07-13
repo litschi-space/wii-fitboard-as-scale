@@ -28,8 +28,9 @@ Wiimote-/Balance-Board-HID-Reports.
   hinten links/rechts)
 - Automatische Kalibrierung direkt aus dem im Board gespeicherten
   Kalibrierungsspeicher (0 kg / 17 kg / 34 kg Referenzpunkte)
-- Schneller Reconnect-Loop: einmal synchronisieren (roter Knopf), danach
-  reicht der normale Power-Knopf am Board
+- Schneller Reconnect-Loop: Script verbindet sich aktiv im Sekundentakt neu,
+  sodass ein Power-Knopf-Druck meist ohne roten Sync-Knopf erkannt wird
+  (kein echtes Bluetooth-Pairing – siehe „Bekannte Einschränkungen“)
 - MQTT-Publish inkl. Home-Assistant-MQTT-Discovery – der Sensor
   „Wii Balance Board Gewicht“ taucht automatisch in HA auf
 - Optionaler Bon-Druck auf einem ESC/POS-USB-Thermodrucker
@@ -65,17 +66,23 @@ scan on
 Roten Sync-Knopf im Batteriefach drücken – das Board erscheint als
 `Nintendo RVL-WBC-01`. Adresse notieren, dann `scan off`.
 
-## Erste Verbindung (einmalig)
-
-Beim allerersten Verbinden **muss** der rote Sync-Knopf im Batteriefach
-gedrückt werden – dabei merkt sich das Board dauerhaft die
-Bluetooth-Adresse des Pis. Danach reicht der normale Power-Knopf vorne
-am Board.
+## Erste Verbindung
 
 ```bash
 sudo python3 wiiboard.py AA:BB:CC:DD:EE:FF
 ```
-(Roten Sync-Knopf drücken, sobald „Warte auf Board …“ erscheint.)
+Roten Sync-Knopf im Batteriefach drücken, sobald „Warte auf Board …“
+erscheint.
+
+**Wichtig:** Dieses Script macht kein echtes Bluetooth-Pairing/Bonding
+(dafür wäre ein HCI-Authentifizierungs-Handshake mit einem binären PIN
+nötig, den das Script nicht implementiert – siehe „Bekannte
+Einschränkungen“). Das Board merkt sich den Host dadurch **nicht**
+zuverlässig dauerhaft. In der Praxis reicht durch den schnellen
+Reconnect-Loop meist der normale Power-Knopf, gelegentlich muss aber
+wieder der rote Sync-Knopf gedrückt werden – vor allem nach längerer
+Standzeit oder wenn das Board komplett neu startet (z. B. nach
+Batteriewechsel).
 
 ## Verwendung
 
@@ -188,17 +195,32 @@ Root-Rechte benötigen.
 - Kalibrierungsdaten werden per Read-Memory-Report aus Adresse
   `0xA40024` gelesen (24 Byte: 0 kg / 17 kg Referenz je 4 Sensoren,
   danach 34 kg Referenz)
-- Nach dem einmaligen Sync (roter Knopf) merkt sich das **Board selbst**
-  die Host-Adresse dauerhaft; der Host muss dafür nichts weiter tun
+- Kein echtes Bluetooth-Pairing/Bonding: Das Script öffnet direkt rohe
+  L2CAP-Sockets, ohne HCI-Authentifizierung. Das funktioniert, weil das
+  Board nach jedem Knopfdruck für ca. 20 Sekunden Verbindungen annimmt –
+  der schnelle Reconnect-Loop nutzt dieses Zeitfenster aus, statt sich
+  auf ein dauerhaftes „Merken“ des Hosts zu verlassen
 
 ## Bekannte Einschränkungen
 
-- Reiner Client-Ansatz: Das Script verbindet sich aktiv zum Board. Der
-  „nur Power-Knopf drücken, Board ruft den Host an“-Workflow (wie ihn
-  die [ESPHome-Balance-Board-Component](https://github.com/gulrotkake/esphome/tree/balance-board)
-  auf ESP32 umsetzt) würde eine Server-Rolle (lauschende L2CAP-Sockets)
-  erfordern – aktuell nicht implementiert. In der Praxis reicht der
-  schnelle Reconnect-Loop aber für alltägliches Wiegen völlig aus.
+- **Kein dauerhaftes Pairing:** Echtes Bonden eines Wiimote/Balance
+  Boards erfordert einen HCI-Authentifizierungs-Handshake, bei dem der
+  Host als PIN seine eigene Bluetooth-Adresse rückwärts in binärer Form
+  sendet (siehe [wiibrew.org](https://wiibrew.org/wiki/Wiimote)). Erst
+  danach merkt sich das Board den Host wirklich dauerhaft und ruft ihn
+  bei jedem Knopfdruck aktiv an. Dieses Script implementiert diesen
+  Handshake nicht (dafür bräuchte es einen eigenen BlueZ-D-Bus-
+  Pairing-Agent), sondern verlässt sich auf den schnellen Reconnect-Loop
+  innerhalb des ca. 20-Sekunden-Zeitfensters, in dem das Board nach
+  jedem Knopfdruck sowieso Verbindungen annimmt. Das funktioniert im
+  Alltag meist gut, aber **nicht garantiert** – gelegentlich ist wieder
+  der rote Sync-Knopf nötig.
+- Für ein wirklich zuverlässiges „nur Power-Knopf drücken“-Verhalten
+  ohne gelegentlichen Rückgriff auf den Sync-Knopf empfiehlt sich die
+  [ESPHome-Balance-Board-Component](https://github.com/gulrotkake/esphome/tree/balance-board)
+  auf einem ESP32 (WROOM32 o.ä. mit Bluetooth Classic) – die implementiert
+  den vollständigen Pairing-Handshake inklusive Server-Rolle für
+  eingehende Verbindungen.
 - Rauschschwelle für „Messung läuft“ ist auf 20 kg fest codiert
   (`weight_threshold` in `do_measurement()`), für andere Anwendungsfälle
   ggf. anpassen.
@@ -210,4 +232,4 @@ Root-Rechte benötigen.
 
 Das Protokoll-Grundgerüst orientiert sich an
 [skorokithakis/gr8w8upd8m8](https://github.com/skorokithakis/gr8w8upd8m8)
-(LGPL).
+(LGPL). Eigener Code hier: [Lizenz nach Wahl, z. B. MIT einfügen].
